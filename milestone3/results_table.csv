@@ -1,0 +1,5 @@
+model,params,status,exec_rate,"mIoU(scored,n=11)",median_IoU,chamfer_median
+Qwen3-VL-8B-Instruct,8B,trained+evaluated,88.9%,0.50,0.57,0.081
+GLM-4.1V-9B-Thinking,9B,re-training (eval pending),-,-,-,-
+Kimi-VL-A3B-Thinking,3B act.,blocked (MoE train assert),-,-,-,-
+InternVL3-8B,8B,blocked (forward signature),-,-,-,-

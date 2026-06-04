@@ -1,0 +1,52 @@
+# Depth-conditioning experiment for Qwen. Identical to config.yaml except:
+#   use_depth: true + depth_frames_dir   -> interleave colormapped depth frames
+#   output_root: stage3_runs_depth        -> never clobbers the RGB-only baseline
+# Compare the resulting stage3_runs_depth/qwen checkpoint against the RGB-only
+# baseline stage3_runs/qwen to read off the IoU delta from adding depth.
+
+# Data
+manifest_dir: /scratch/users/abzhong/stage2b
+frames_dir: /scratch/users/abzhong/stage2b/frames
+n_frames: 8
+max_seq_len: 4096
+
+# Depth conditioning
+use_depth: true
+depth_frames_dir: /scratch/users/abzhong/stage2b/depth_frames
+
+# Output (separate tree so the RGB-only baseline checkpoint is untouched)
+output_root: /scratch/users/abzhong/stage3_runs_depth
+
+# Training
+epochs: 3
+per_device_batch_size: 1
+gradient_accumulation_steps: 8        # effective batch 8
+learning_rate: 1.0e-4
+warmup_steps: 100
+lr_scheduler: cosine
+weight_decay: 0.01
+max_grad_norm: 1.0
+precision: bf16
+gradient_checkpointing: true
+
+# LoRA
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# Logging / Checkpointing
+logging_steps: 10
+eval_steps: 500
+save_steps: 500
+save_total_limit: 3
+
+# Generation (for eval / inference)
+gen_max_new_tokens: 3072
+gen_temperature: 0.0
+gen_do_sample: false
+
+# Models. Each entry overrides only what's necessary.
+models:
+  qwen:
+    hf_id: Qwen/Qwen3-VL-8B-Instruct
+    lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]

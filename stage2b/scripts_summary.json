@@ -1,0 +1,29 @@
+{
+  "train": {
+    "total": 7924,
+    "syntax_errors": 0,
+    "syntax_error_ids": [],
+    "lines_mean": 30.0,
+    "chars_mean": 970.0,
+    "chars_max": 4694,
+    "chars_p95": 2347
+  },
+  "validation": {
+    "total": 991,
+    "syntax_errors": 0,
+    "syntax_error_ids": [],
+    "lines_mean": 29.9,
+    "chars_mean": 970.9,
+    "chars_max": 4652,
+    "chars_p95": 2345
+  },
+  "test": {
+    "total": 994,
+    "syntax_errors": 0,
+    "syntax_error_ids": [],
+    "lines_mean": 31.3,
+    "chars_mean": 1029.3,
+    "chars_max": 4904,
+    "chars_p95": 2471
+  }
+}
