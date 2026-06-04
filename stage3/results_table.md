@@ -61,21 +61,42 @@ performance rises. The fixed-denominator overall mIoU (+0.031) and the threshold
 cross the quality bars) but **not peak per-part fidelity** (scored-mIoU flat). The
 residual shape error on already-solved parts needs a different lever → Table C.
 
-## Table C — Controlled ViT-adaptation ablation (the thesis)  ⏳ PENDING
+## Table C — Controlled ViT-adaptation ablation (the thesis)  ✅
 
 `qwen_vit` is byte-identical to the Qwen baseline (same data/recipe/LLM-LoRA) **except
 LoRA also adapts the 27-block vision transformer** (qkv, proj, linear_fc1, linear_fc2
 + merger = 117 vision layers). Single-variable test of: *does adapting the ViT to the
-synthetic-CAD render domain raise shape fidelity?*
+synthetic-CAD render domain raise shape fidelity?*  **Answer: yes, substantially.**
 
-| | Frozen ViT (baseline) | Adapted ViT (qwen_vit) | Δ |
+| | Frozen ViT (baseline) | **Adapted ViT (qwen_vit)** | Δ |
 |---|---|---|---|
-| Execution rate | 88.9% | _pending_ | _ |
-| **mIoU (overall)** | 0.469 | _pending_ | _ |
-| IoU≥0.5 | 488 | _pending_ | _ |
-| Chamfer median | 0.059 | _pending_ | _ |
+| Execution rate | 88.9% | **91.4%** | +2.5 pts |
+| **mIoU (overall)** | 0.469 | **0.527** | **+0.058** |
+| mIoU (scored) | 0.533 | **0.584** | **+0.050** |
+| median IoU (scored) | 0.564 | **0.655** | **+0.091** |
+| IoU≥0.5 | 488 | **563** | +75 |
+| IoU≥0.7 | 326 | **416** | +90 |
+| Chamfer median | 0.059 | **0.044** | −0.015 (better) |
 
-(Training job 1610287; eval 1611584 → geom 1611585 dependency-chained; watcher fills this in.)
+**This is the cleanest result in the project.** Unlike RFT, the *scored* mIoU rose
+(+0.050) **even though execution rate also rose** — so it is **not** a denominator
+artifact; it is a genuine per-part fidelity gain. The median jumped +0.091 — the
+typical part is markedly better. Adapting the ViT to the render domain (vs. its
+natural-photo pretraining) lets it attend to the edges/faces/symmetry that determine
+the solid.
+
+## Headline comparison (Qwen3-VL, greedy, n=994)
+
+| Intervention | Exec % | **mIoU (overall)** | mIoU (scored) | median | IoU≥0.7 | Chamfer med | what it buys |
+|---|---|---|---|---|---|---|---|
+| SFT baseline (frozen ViT) | 88.9 | 0.469 | 0.533 | 0.564 | 326 | 0.059 | — |
+| + RFT / STaR (data engine) | **95.7** | 0.500 | 0.526 | 0.553 | 353 | 0.058 | **coverage + validity** |
+| + ViT adaptation (qwen_vit) | 91.4 | **0.527** | **0.584** | **0.655** | **416** | **0.044** | **per-part fidelity** |
+
+**The two interventions are complementary by mechanism** — RFT broadens *which* parts
+the model can produce (exec ↑, more parts solved), ViT-adaptation deepens *how well* it
+produces them (scored/median IoU ↑). They attack different terms, so **combining them
+(RFT-curated targets + ViT-adapted encoder) is the obvious next run and likely additive.**
 
 ## Table D — Sim2real gap (real phone video)  ⏳ PENDING
 

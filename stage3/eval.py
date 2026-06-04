@@ -108,6 +108,8 @@ def main():
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
     parser.add_argument("--no_repeat_ngram_size", type=int, default=0)
     parser.add_argument("--max_new_tokens", type=int, default=None)
+    parser.add_argument("--n_frames", type=int, default=None,
+                        help="override frame count (must match the trained model)")
     args = parser.parse_args()
 
     # Some models need monkey-patches that live in their train_*.py modules;
@@ -120,7 +122,7 @@ def main():
 
     cfg = load_config(args.config)
     mcfg = cfg.models[args.model]
-    n_frames = mcfg.get("n_frames", cfg.n_frames)
+    n_frames = args.n_frames or mcfg.get("n_frames", cfg.n_frames)
 
     out_dir = args.out_dir or (args.checkpoint_dir / "eval")
     out_dir.mkdir(parents=True, exist_ok=True)

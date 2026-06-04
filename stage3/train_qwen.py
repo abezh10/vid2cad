@@ -99,9 +99,20 @@ def main():
                              "'qwen_vit' = also LoRA-adapts the vision transformer")
     parser.add_argument("--output_name", default=None,
                         help="adapter subdir under output_root (defaults to --model_key)")
+    # Optional hyperparameter overrides for sweeps (e.g. ViT-capacity ablations).
+    # Each defaults to None -> keep the config value.
+    parser.add_argument("--lora_rank", type=int, default=None)
+    parser.add_argument("--lora_alpha", type=int, default=None)
+    parser.add_argument("--n_frames", type=int, default=None)
+    parser.add_argument("--epochs", type=int, default=None)
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    for key in ("lora_rank", "lora_alpha", "n_frames", "epochs"):
+        val = getattr(args, key)
+        if val is not None:
+            cfg.raw[key] = val
+            print(f"OVERRIDE {key} = {val}")
     mcfg = cfg.models[args.model_key]
     output_name = args.output_name or args.model_key
     use_depth = bool(cfg.raw.get("use_depth", False))
