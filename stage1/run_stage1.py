@@ -24,11 +24,13 @@ def setup_logging(log_path: Path, object_id: str) -> logging.Logger:
     return logger
 
 
-def is_complete(output_dir: Path, num_frames: int) -> bool:
+def is_complete(output_dir: Path, num_frames: int, no_exr: bool = False) -> bool:
     if not (output_dir / "video.mp4").exists():
         return False
     if not (output_dir / "cameras.json").exists():
         return False
+    if no_exr:
+        return True
     depth_dir = output_dir / "depth"
     mask_dir  = output_dir / "mask"
     if not depth_dir.exists() or not mask_dir.exists():
@@ -80,6 +82,7 @@ def run_blender(
     elevation_deg: float,
     aruco_size_mm: float,
     enable_blobs: bool,
+    no_exr: bool,
     blender_exe: str,
     engine: str,
     logger: logging.Logger,
@@ -103,6 +106,8 @@ def run_blender(
     ]
     if enable_blobs:
         cmd.append("--enable_blobs")
+    if no_exr:
+        cmd.append("--no_exr")
     logger.info("Blender cmd: %s", " ".join(cmd))
 
     try:
@@ -153,6 +158,8 @@ def main():
                         help="Physical side-length of the printed ArUco marker (mm)")
     parser.add_argument("--enable_blobs", action="store_true",
                         help="Scatter random background blobs around the object (off by default)")
+    parser.add_argument("--no_exr", action="store_true",
+                        help="Skip per-frame depth/mask EXRs (VLM-only renders, ~10x smaller)")
     parser.add_argument("--force", action="store_true",
                         help="Re-render even if all outputs already exist")
     args = parser.parse_args()
@@ -173,12 +180,13 @@ def main():
 
     obj_out = args.output_dir / args.object_id
     obj_out.mkdir(parents=True, exist_ok=True)
-    (obj_out / "depth").mkdir(exist_ok=True)
+    if not args.no_exr:
+        (obj_out / "depth").mkdir(exist_ok=True)
 
     logger = setup_logging(obj_out / "stage1.log", args.object_id)
     logger.info("Starting Stage 1 for object %s", args.object_id)
 
-    if not args.force and is_complete(obj_out, args.num_frames):
+    if not args.force and is_complete(obj_out, args.num_frames, args.no_exr):
         logger.info("All outputs present — skipping (use --force to re-render)")
         return
 
@@ -203,6 +211,7 @@ def main():
         elevation_deg=args.elevation_deg,
         aruco_size_mm=args.aruco_size_mm,
         enable_blobs=args.enable_blobs,
+        no_exr=args.no_exr,
         blender_exe=args.blender,
         engine=args.engine,
         logger=logger,
@@ -211,7 +220,7 @@ def main():
         logger.error("Blender render failed")
         sys.exit(3)
 
-    if not is_complete(obj_out, args.num_frames):
+    if not is_complete(obj_out, args.num_frames, args.no_exr):
         logger.error("Blender finished but expected outputs are missing")
         sys.exit(4)
 

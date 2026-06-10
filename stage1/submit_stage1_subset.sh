@@ -19,6 +19,9 @@ BLENDER_EXE="/scratch/users/abzhong/blender/blender"
 ENGINE="BLENDER_EEVEE"
 NUM_FRAMES=60
 FPS=24
+RES_W=640
+RES_H=480
+NO_EXR=0
 PARTITION="normal"
 NUM_TASKS=500
 CPUS=4
@@ -35,6 +38,8 @@ while [[ $# -gt 0 ]]; do
         --engine)       ENGINE="$2";       shift 2 ;;
         --num_frames)   NUM_FRAMES="$2";   shift 2 ;;
         --fps)          FPS="$2";          shift 2 ;;
+        --resolution)   RES_W="$2"; RES_H="$3"; shift 3 ;;
+        --no_exr)       NO_EXR=1;          shift 1 ;;
         --time)         TIME_LIMIT="$2";   shift 2 ;;
         --partition)    PARTITION="$2";    shift 2 ;;
         --cpus)         CPUS="$2";         shift 2 ;;
@@ -66,8 +71,12 @@ CHUNK=$(( (N + ACTUAL_TASKS - 1) / ACTUAL_TASKS ))
 MAX_CONCURRENT=$(( 512 / CPUS ))
 if (( MAX_CONCURRENT > 128 )); then MAX_CONCURRENT=128; fi
 
+EXTRA_FLAGS=""
+if [[ "$NO_EXR" -eq 1 ]]; then EXTRA_FLAGS="--no_exr"; fi
+
 echo "Manifest: $N objects → $ACTUAL_TASKS tasks × ~$CHUNK objects/task"
 echo "Resources: ${CPUS} CPUs, ${MEM} RAM, time ${TIME_LIMIT}"
+echo "Render: ${RES_W}x${RES_H}, ${NUM_FRAMES} frames @ ${FPS}fps, no_exr=${NO_EXR}"
 echo "Max concurrent: ${MAX_CONCURRENT}"
 
 # ---------- write sbatch worker ----------
@@ -122,6 +131,7 @@ for (( LINE=START; LINE<=END; LINE++ )); do
         --engine       "${ENGINE}" \\
         --num_frames   ${NUM_FRAMES} \\
         --fps          ${FPS} \\
+        --resolution   ${RES_W} ${RES_H} ${EXTRA_FLAGS} \\
     && OK=\$(( OK + 1 )) || FAIL=\$(( FAIL + 1 ))
 done
 

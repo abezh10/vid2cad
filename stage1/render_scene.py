@@ -44,6 +44,9 @@ def parse_args():
                    help="Physical side-length of the printed ArUco marker (mm)")
     p.add_argument("--enable_blobs",        action="store_true",
                    help="Scatter randomised background blobs around the object (off by default)")
+    p.add_argument("--no_exr",              action="store_true",
+                   help="Skip per-frame depth/mask EXR outputs (VLM-only renders; "
+                        "~10x smaller per object). cameras.json is still written.")
     p.add_argument("--engine",              default="BLENDER_EEVEE")
     return p.parse_args(argv)
 
@@ -621,7 +624,8 @@ def apply_shake(scene, cam_obj, num_frames: int,
 # ---------------------------------------------------------------------------
 
 def configure_render(scene, output_dir: Path, depth_dir: Path, mask_dir: Path,
-                     num_frames: int, fps: int, resolution: list, engine: str):
+                     num_frames: int, fps: int, resolution: list, engine: str,
+                     no_exr: bool = False):
     import bpy
     scene.render.engine             = engine
     scene.render.resolution_x       = resolution[0]
@@ -630,11 +634,6 @@ def configure_render(scene, output_dir: Path, depth_dir: Path, mask_dir: Path,
     scene.render.fps                = fps
     scene.render.use_persistent_data = True
     view_layer = scene.view_layers[0]
-    view_layer.use_pass_z                = True
-    # Cryptomatte object pass → per-object coverage mask via the matching
-    # CompositorNodeCryptomatteV2 below. EEVEE's IndexOB pass is documented
-    # but does not actually populate output in Blender 3.6.
-    view_layer.use_pass_cryptomatte_object = True
 
     scene.render.filepath                      = str(output_dir / "video")
     scene.render.image_settings.file_format    = "FFMPEG"
@@ -642,6 +641,17 @@ def configure_render(scene, output_dir: Path, depth_dir: Path, mask_dir: Path,
     scene.render.ffmpeg.codec                  = "H264"
     scene.render.ffmpeg.constant_rate_factor   = "MEDIUM"
     scene.render.ffmpeg.audio_codec            = "NONE"
+
+    if no_exr:
+        # VLM-only render: video + cameras.json, no per-frame EXR passes.
+        scene.use_nodes = False
+        return
+
+    view_layer.use_pass_z                = True
+    # Cryptomatte object pass → per-object coverage mask via the matching
+    # CompositorNodeCryptomatteV2 below. EEVEE's IndexOB pass is documented
+    # but does not actually populate output in Blender 3.6.
+    view_layer.use_pass_cryptomatte_object = True
 
     scene.use_nodes = True
     tree  = scene.node_tree
@@ -728,8 +738,9 @@ def main():
     output_dir = args.output_dir
     depth_dir  = output_dir / "depth"
     mask_dir   = output_dir / "mask"
-    depth_dir.mkdir(parents=True, exist_ok=True)
-    mask_dir.mkdir(parents=True, exist_ok=True)
+    if not args.no_exr:
+        depth_dir.mkdir(parents=True, exist_ok=True)
+        mask_dir.mkdir(parents=True, exist_ok=True)
 
     # Deterministic per-object RNG
     seed = derive_seed(output_dir)
@@ -787,7 +798,8 @@ def main():
 
     scene = bpy.context.scene
     configure_render(scene, output_dir, depth_dir, mask_dir,
-                     args.num_frames, args.fps, args.resolution, args.engine)
+                     args.num_frames, args.fps, args.resolution, args.engine,
+                     no_exr=args.no_exr)
 
     # Collect camera poses AFTER shake keyframes are in place
     cameras = collect_cameras(scene, cam_obj, args.num_frames, args.resolution)

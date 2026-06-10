@@ -1,0 +1,67 @@
+# Big-run config: identical to config.yaml EXCEPT sim2real augmentation is ON
+# at MILD strength (train frames only; val/eval stay clean). Mild = visible
+# roughening toward phone-video statistics without degrading the primary
+# synthetic-test metric the way the aggressive defaults might.
+
+# Data
+manifest_dir: /scratch/users/abzhong/stage2b
+frames_dir: /scratch/users/abzhong/stage2b/frames
+n_frames: 8
+max_seq_len: 4096
+
+# Output
+output_root: /scratch/users/abzhong/stage3_runs
+
+# Training
+epochs: 3
+per_device_batch_size: 1
+gradient_accumulation_steps: 8        # effective batch 8
+learning_rate: 1.0e-4
+warmup_steps: 100
+lr_scheduler: cosine
+weight_decay: 0.01
+max_grad_norm: 1.0
+precision: bf16
+gradient_checkpointing: true
+
+# LoRA
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# Logging / Checkpointing
+logging_steps: 10
+eval_steps: 500
+save_steps: 500
+save_total_limit: 3
+
+# Generation (for eval / inference)
+gen_max_new_tokens: 3072
+gen_temperature: 0.0
+gen_do_sample: false
+
+# Sim2real train-time augmentation — MILD (see stage3/augment.py DEFAULT_AUGMENT
+# for the op semantics; these override probabilities/magnitudes downward).
+augment:
+  enabled: true
+  crop: {p: 0.5, scale_min: 0.85, scale_max: 1.0}
+  rotate: {p: 0.3, deg: 4.0}
+  brightness: {p: 0.6, min: 0.80, max: 1.20}
+  contrast: {p: 0.5, min: 0.85, max: 1.20}
+  color: {p: 0.5, min: 0.80, max: 1.20}
+  white_balance: {p: 0.5, gain: 0.08}
+  gamma: {p: 0.4, min: 0.85, max: 1.18}
+  blur: {p: 0.35, radius_max: 1.0}
+  motion_blur: {p: 0.2, ksize_max: 7}
+  downscale: {p: 0.35, scale_min: 0.60, scale_max: 0.95}
+  noise: {p: 0.5, sigma_max: 8.0}
+  jpeg: {p: 0.6, q_min: 40, q_max: 85}
+
+# Models (same as config.yaml)
+models:
+  qwen:
+    hf_id: Qwen/Qwen3-VL-8B-Instruct
+    lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  qwen_vit:
+    hf_id: Qwen/Qwen3-VL-8B-Instruct
+    lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "qkv", "proj", "linear_fc1", "linear_fc2"]

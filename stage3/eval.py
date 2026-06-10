@@ -30,7 +30,7 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 from peft import PeftModel
 
 sys.path.insert(0, str(Path(__file__).parent))
-from data import VideoCadQueryDataset, SYSTEM_PROMPT, USER_PROMPT, USER_PROMPT_DEPTH
+from data import VideoCadQueryDataset, USER_PROMPT_DEPTH, get_prompts
 from train_common import load_config
 
 
@@ -110,7 +110,16 @@ def main():
     parser.add_argument("--max_new_tokens", type=int, default=None)
     parser.add_argument("--n_frames", type=int, default=None,
                         help="override frame count (must match the trained model)")
+    parser.add_argument("--prompt_variant", default="default",
+                        choices=["default", "geom"],
+                        help="MUST match how the checkpoint was trained")
+    parser.add_argument("--max_side", type=int, default=None,
+                        help="downscale frames so max(w,h)<=this; match training")
+    parser.add_argument("--test_manifest", type=Path, default=None,
+                        help="override test manifest (e.g. high-res test_hr.jsonl)")
     args = parser.parse_args()
+    system_prompt, user_prompt = get_prompts(args.prompt_variant)
+    print(f"PROMPT variant: {args.prompt_variant}")
 
     # Some models need monkey-patches that live in their train_*.py modules;
     # importing the module applies them at import time. Qwen: vision-encoder
@@ -169,9 +178,12 @@ def main():
         if not depth_dir:
             sys.exit("--use_depth set but no depth_frames_dir (CLI or config)")
         print(f"DEPTH conditioning ON: interleaving depth frames from {depth_dir}")
+    test_manifest = args.test_manifest or (Path(cfg.manifest_dir) / "test.jsonl")
+    print(f"TEST manifest: {test_manifest}  max_side={args.max_side}")
     test_ds = VideoCadQueryDataset(
-        Path(cfg.manifest_dir) / "test.jsonl",
+        test_manifest,
         cfg.frames_dir, n_frames, depth_frames_dir=depth_dir,
+        max_side=args.max_side,
     )
     n = len(test_ds) if args.limit == 0 else min(args.limit, len(test_ds))
     print(f"Evaluating on {n} test examples ...")
@@ -227,7 +239,7 @@ def main():
                 prompt_text = USER_PROMPT_DEPTH
             else:
                 images = row["frames"]
-                prompt_text = USER_PROMPT
+                prompt_text = user_prompt
             # Kimi takes a flat image list passed to the processor (placeholders
             # in the message); the others embed the image objects in the message.
             if args.model == "kimi":
@@ -235,7 +247,7 @@ def main():
             else:
                 img_content = [{"type": "image", "image": im} for im in images]
             messages = [
-                {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]},
+                {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
                 {"role": "user", "content": (
                     img_content + [{"type": "text", "text": prompt_text}]
                 )},

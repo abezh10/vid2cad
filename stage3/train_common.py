@@ -98,9 +98,13 @@ def make_training_args(model_name: str, cfg: StageConfig) -> TrainingArguments:
     output_dir = Path(cfg.output_root) / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # max_steps>0 overrides epochs (used by the fast smoke-test job to exercise
+    # the full code path + GPU memory in a few minutes).
+    max_steps = int(cfg.raw.get("max_steps", -1))
     return TrainingArguments(
         output_dir=str(output_dir),
         num_train_epochs=cfg.epochs,
+        max_steps=max_steps,
         per_device_train_batch_size=cfg.per_device_batch_size,
         per_device_eval_batch_size=cfg.per_device_batch_size,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
@@ -120,6 +124,9 @@ def make_training_args(model_name: str, cfg: StageConfig) -> TrainingArguments:
         report_to=["tensorboard"],
         remove_unused_columns=False,
         dataloader_pin_memory=False,
+        # >0 moves JPEG decode + processor tokenization off the GPU-feeding
+        # process (config knob `dataloader_num_workers`; default 0 = legacy).
+        dataloader_num_workers=int(cfg.raw.get("dataloader_num_workers", 0)),
         ddp_find_unused_parameters=False,
     )
 

@@ -80,7 +80,7 @@ def _patched_fast_pos_embed_interpolate(self, grid_thw):
 _qvlm.Qwen3VLMoeVisionModel.fast_pos_embed_interpolate = _patched_fast_pos_embed_interpolate
 
 sys.path.insert(0, str(Path(__file__).parent))
-from data import VideoCadQueryDataset, SYSTEM_PROMPT, USER_PROMPT, USER_PROMPT_DEPTH
+from data import (VideoCadQueryDataset, USER_PROMPT_DEPTH, get_prompts)
 from train_common import (
     load_config,
     TokenizedDataset,
@@ -105,16 +105,38 @@ def main():
     parser.add_argument("--lora_alpha", type=int, default=None)
     parser.add_argument("--n_frames", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--max_steps", type=int, default=None,
+                        help="cap training steps (smoke test); overrides epochs")
+    parser.add_argument("--max_side", type=int, default=None,
+                        help="downscale frames so max(w,h)<=this (token budget "
+                             "control for high-res renders); None = native res")
+    parser.add_argument("--dataloader_workers", type=int, default=None,
+                        help="dataloader worker processes (JPEG decode + "
+                             "tokenize off the main process); None = config/0")
+    # Override the train manifest (e.g. a geometry-difficulty-balanced one from
+    # build_balanced_manifest.py). Defaults to <manifest_dir>/train.jsonl. The
+    # validation set always stays the original (clean, comparable val loss).
+    parser.add_argument("--train_manifest", type=Path, default=None)
+    # Prompt-conditioning variant: 'default' (original) or 'geom' (geometry-aware,
+    # teaches the DSL primitives for angled/curved/small/multi-solid parts). MUST
+    # be re-passed to eval.py so the checkpoint sees the same prompt at test time.
+    parser.add_argument("--prompt_variant", default="default",
+                        choices=["default", "geom"])
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    for key in ("lora_rank", "lora_alpha", "n_frames", "epochs"):
+    for key in ("lora_rank", "lora_alpha", "n_frames", "epochs", "max_steps"):
         val = getattr(args, key)
         if val is not None:
             cfg.raw[key] = val
             print(f"OVERRIDE {key} = {val}")
+    if args.dataloader_workers is not None:
+        cfg.raw["dataloader_num_workers"] = args.dataloader_workers
+        print(f"OVERRIDE dataloader_num_workers = {args.dataloader_workers}")
     mcfg = cfg.models[args.model_key]
     output_name = args.output_name or args.model_key
+    system_prompt, user_prompt = get_prompts(args.prompt_variant)
+    print(f"PROMPT variant: {args.prompt_variant}")
     use_depth = bool(cfg.raw.get("use_depth", False))
     depth_dir = cfg.raw.get("depth_frames_dir") if use_depth else None
     if use_depth:
@@ -152,10 +174,10 @@ def main():
         else:
             user_content = (
                 [{"type": "image", "image": f} for f in row["frames"]] +
-                [{"type": "text", "text": USER_PROMPT}]
+                [{"type": "text", "text": user_prompt}]
             )
         messages = [
-            {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]},
+            {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
             {"role": "user", "content": user_content},
             {"role": "assistant", "content": [{"type": "text", "text": row["code"]}]},
         ]
@@ -190,17 +212,20 @@ def main():
         out["labels"] = labels
         return out
 
+    train_manifest = args.train_manifest or (Path(cfg.manifest_dir) / "train.jsonl")
+    print(f"TRAIN manifest: {train_manifest}  max_side={args.max_side}")
     train_ds = TokenizedDataset(
         VideoCadQueryDataset(
-            Path(cfg.manifest_dir) / "train.jsonl",
+            train_manifest,
             cfg.frames_dir, cfg.n_frames, depth_frames_dir=depth_dir,
-            augment=train_aug),
+            augment=train_aug, max_side=args.max_side),
         format_example,
     )
     val_ds = TokenizedDataset(
         VideoCadQueryDataset(
             Path(cfg.manifest_dir) / "validation.jsonl",
-            cfg.frames_dir, cfg.n_frames, depth_frames_dir=depth_dir),
+            cfg.frames_dir, cfg.n_frames, depth_frames_dir=depth_dir,
+            max_side=args.max_side),
         format_example,
     )
 
